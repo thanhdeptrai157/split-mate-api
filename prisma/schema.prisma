@@ -6,6 +6,13 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum GroupRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 model User {
   id        String  @id @default(uuid())
   email     String  @unique
@@ -17,6 +24,10 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   refreshTokens RefreshToken[]
+
+  groupMemberships GroupMember[]
+  createdGroups    Group[]       @relation("GroupCreator")
+  createdBills     Bill[]        @relation("BillCreator")
 
   @@map("users")
 }
@@ -36,4 +47,119 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+model Group {
+  id         String  @id @default(uuid())
+  name       String
+  avatarUrl  String? @map("avatar_url")
+  inviteCode String? @unique @map("invite_code")
+
+  createdById String @map("created_by_id")
+  createdBy   User   @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members GroupMember[]
+  bills   Bill[]
+
+  @@index([createdById])
+  @@map("groups")
+}
+
+model GroupMember {
+  id String @id @default(uuid())
+
+  groupId String @map("group_id")
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role GroupRole @default(MEMBER)
+
+  joinedAt       DateTime        @default(now()) @map("joined_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  billPayments   BillPayer[]
+  billItemShares BillItemShare[]
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([userId])
+  @@map("group_members")
+}
+
+model Bill {
+  id         String  @id @default(uuid())
+  name       String
+  note       String?
+  receiptUrl String? @map("receipt_url")
+
+  groupId String @map("group_id")
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  createdById String @map("created_by_id")
+  createdBy   User   @relation("BillCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  items  BillItem[]
+  payers BillPayer[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([groupId])
+  @@index([createdById])
+  @@map("bills")
+}
+
+model BillItem {
+  id     String @id @default(uuid())
+  name   String
+  amount BigInt
+
+  billId String @map("bill_id")
+  bill   Bill   @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  shares BillItemShare[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([billId])
+  @@map("bill_items")
+}
+
+model BillPayer {
+  id String @id @default(uuid())
+
+  billId String @map("bill_id")
+  bill   Bill   @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  memberId String      @map("member_id")
+  member   GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  amount BigInt
+
+  @@unique([billId, memberId])
+  @@index([billId])
+  @@index([memberId])
+  @@map("bill_payers")
+}
+
+model BillItemShare {
+  id String @id @default(uuid())
+
+  itemId String   @map("item_id")
+  item   BillItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  memberId String      @map("member_id")
+  member   GroupMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  amount BigInt
+
+  @@unique([itemId, memberId])
+  @@index([itemId])
+  @@index([memberId])
+  @@map("bill_item_shares")
 }

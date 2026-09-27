@@ -9,6 +9,12 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
 import { ConfigService } from '@nestjs/config';
+import {
+  ApiBearerAuth,
+  ApiCookieAuth,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { GoogleLoginDto } from './dto/google-login.dto.js';
 import type { CookieOptions, Response, Request } from 'express';
 import type { AccessTokenPayload } from './strategies/access-token.strategy.js';
@@ -16,6 +22,7 @@ import { AccessTokenGuard } from './guards/access-token.guard.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
 
 @Controller('auth')
+@ApiTags('auth')
 export class AuthController {
   private readonly authService: AuthService;
   private readonly configService: ConfigService;
@@ -48,6 +55,7 @@ export class AuthController {
     };
   }
   @Post('google-login')
+  @ApiOperation({ summary: 'Sign in with Google' })
   async googleLogin(
     @Body() dto: GoogleLoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -63,6 +71,8 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @ApiCookieAuth('refresh_token')
+  @ApiOperation({ summary: 'Refresh the access token' })
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
@@ -83,6 +93,8 @@ export class AuthController {
   }
 
   @Post('logout')
+  @ApiCookieAuth('refresh_token')
+  @ApiOperation({ summary: 'Sign out and revoke the refresh token' })
   async logout(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
@@ -99,6 +111,8 @@ export class AuthController {
   }
   @Get('me')
   @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get the current user' })
   getMe(@CurrentUser() user: AccessTokenPayload) {
     return this.authService.getMe(user.sub);
   }

@@ -1,6 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 
 import { AppModule } from './app.module.js';
@@ -31,11 +32,28 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new ResponseInterceptor());
 
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('SplitMate API')
+    .setDescription('API documentation for SplitMate')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .addCookieAuth('refresh_token')
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+
+  SwaggerModule.setup('docs', app, swaggerDocument, {
+    useGlobalPrefix: true,
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  });
+
   const port = configService.get<number>('PORT') ?? 3000;
 
   await app.listen(port);
 
   console.log(`SplitMate API: http://localhost:${port}/api`);
+  console.log(`Swagger docs: http://localhost:${port}/api/docs`);
 }
 
 void bootstrap();
