@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { GroupRole, Prisma } from '../generated/prisma/client.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
@@ -19,7 +23,9 @@ describe('GroupService', () => {
   let groupFindUnique: ReturnType<typeof vi.fn>;
   let groupFindFirst: ReturnType<typeof vi.fn>;
   let groupFindMany: ReturnType<typeof vi.fn>;
+  let groupUpdate: ReturnType<typeof vi.fn>;
   let groupMemberCreate: ReturnType<typeof vi.fn>;
+  let groupMemberFindUnique: ReturnType<typeof vi.fn>;
   let service: GroupService;
 
   beforeEach(() => {
@@ -27,7 +33,9 @@ describe('GroupService', () => {
     groupFindUnique = vi.fn();
     groupFindFirst = vi.fn();
     groupFindMany = vi.fn();
+    groupUpdate = vi.fn();
     groupMemberCreate = vi.fn();
+    groupMemberFindUnique = vi.fn();
 
     const prisma = {
       $transaction: transaction,
@@ -35,9 +43,11 @@ describe('GroupService', () => {
         findUnique: groupFindUnique,
         findFirst: groupFindFirst,
         findMany: groupFindMany,
+        update: groupUpdate,
       },
       groupMember: {
         create: groupMemberCreate,
+        findUnique: groupMemberFindUnique,
       },
     } as unknown as PrismaService;
 
@@ -192,5 +202,48 @@ describe('GroupService', () => {
     await expect(service.getGroupDetail('user-id', 'group-id')).rejects.toThrow(
       NotFoundException,
     );
+  });
+
+  it('lets an OWNER update the group name and avatar', async () => {
+    groupMemberFindUnique.mockResolvedValue({ role: GroupRole.OWNER });
+    groupUpdate.mockResolvedValue({ ...group, name: 'New name' });
+
+    await expect(
+      service.updateGroup('owner-id', 'group-id', {
+        name: 'New name',
+        avatarUrl: 'https://cdn.test/groups/owner-id/a.jpg',
+      }),
+    ).resolves.toMatchObject({ name: 'New name' });
+
+    expect(groupUpdate).toHaveBeenCalledWith({
+      where: { id: 'group-id' },
+      data: {
+        name: 'New name',
+        avatarUrl: 'https://cdn.test/groups/owner-id/a.jpg',
+      },
+      select: expect.objectContaining({
+        id: true,
+        name: true,
+        avatarUrl: true,
+      }),
+    });
+  });
+
+  it('rejects a regular member updating the group', async () => {
+    groupMemberFindUnique.mockResolvedValue({ role: GroupRole.MEMBER });
+
+    await expect(
+      service.updateGroup('member-id', 'group-id', { name: 'Hack' }),
+    ).rejects.toThrow(ForbiddenException);
+    expect(groupUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects updating a group the user is not in', async () => {
+    groupMemberFindUnique.mockResolvedValue(null);
+
+    await expect(
+      service.updateGroup('stranger-id', 'group-id', { name: 'Hack' }),
+    ).rejects.toThrow(NotFoundException);
+    expect(groupUpdate).not.toHaveBeenCalled();
   });
 });

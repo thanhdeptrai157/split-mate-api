@@ -18,6 +18,8 @@ model User {
   email     String  @unique
   name      String
   avatarUrl String? @map("avatar_url")
+  /// Ảnh QR nhận tiền (URL công khai trên R2).
+  qrUrl     String? @map("qr_url")
   googleId  String? @unique @map("google_id")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -64,6 +66,8 @@ model Group {
   members GroupMember[]
   bills   Bill[]
 
+  settlements Settlement[]
+
   @@index([createdById])
   @@map("groups")
 }
@@ -84,6 +88,9 @@ model GroupMember {
   billPayments   BillPayer[]
   billItemShares BillItemShare[]
 
+  settlementsPaid     Settlement[] @relation("SettlementPayer")
+  settlementsReceived Settlement[] @relation("SettlementPayee")
+
   @@unique([groupId, userId])
   @@index([groupId])
   @@index([userId])
@@ -91,10 +98,12 @@ model GroupMember {
 }
 
 model Bill {
-  id         String  @id @default(uuid())
-  name       String
-  note       String?
-  receiptUrl String? @map("receipt_url")
+  id   String  @id @default(uuid())
+  name String
+  note String?
+
+  /// Object key trên R2 (ví dụ `bills/<userId>/<uuid>.jpg`), không phải URL.
+  receiptKey String? @map("receipt_key")
 
   groupId String @map("group_id")
   group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
@@ -162,4 +171,40 @@ model BillItemShare {
   @@index([itemId])
   @@index([memberId])
   @@map("bill_item_shares")
+}
+
+enum SettlementStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+/// Một lượt trả nợ giữa hai thành viên trong nhóm (ví dụ chuyển khoản trả tiền bill).
+model Settlement {
+  id String @id @default(uuid())
+
+  amount BigInt
+  note   String?
+  status SettlementStatus @default(PENDING)
+
+  groupId String @map("group_id")
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  /// Thành viên chuyển tiền (người trả nợ).
+  fromMemberId String      @map("from_member_id")
+  fromMember   GroupMember @relation("SettlementPayer", fields: [fromMemberId], references: [id], onDelete: Cascade)
+
+  /// Thành viên nhận tiền (chủ nợ).
+  toMemberId String      @map("to_member_id")
+  toMember   GroupMember @relation("SettlementPayee", fields: [toMemberId], references: [id], onDelete: Cascade)
+
+  confirmedAt DateTime? @map("confirmed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([groupId])
+  @@index([fromMemberId])
+  @@index([toMemberId])
+  @@map("settlements")
 }

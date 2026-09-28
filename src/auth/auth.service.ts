@@ -103,8 +103,9 @@ export class AuthService {
         data: {
           googleId: googleUser.googleId,
           email: googleUser.email,
-          name: googleUser.name,
-          avatarUrl: googleUser.picture,
+          // Giữ tên/ảnh người dùng đã chỉnh trong hồ sơ; chỉ điền avatar từ
+          // Google khi người dùng chưa có ảnh.
+          ...(user.avatarUrl ? {} : { avatarUrl: googleUser.picture }),
         },
       });
     } else {

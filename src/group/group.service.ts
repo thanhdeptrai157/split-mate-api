@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto';
 
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -9,6 +10,7 @@ import {
 
 import { GroupRole, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { UpdateGroupDto } from './dto/update-group.dto.js';
 
 const INVITE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const INVITE_CODE_LENGTH = 8;
@@ -83,6 +85,40 @@ export class GroupService {
     }
 
     return group;
+  }
+
+  async updateGroup(userId: string, groupId: string, dto: UpdateGroupDto) {
+    const membership = await this.prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId } },
+      select: { role: true },
+    });
+
+    if (!membership) {
+      throw new NotFoundException('Group not found');
+    }
+
+    if (
+      membership.role !== GroupRole.OWNER &&
+      membership.role !== GroupRole.ADMIN
+    ) {
+      throw new ForbiddenException(
+        'Only group administrators can update this group',
+      );
+    }
+
+    return this.prisma.group.update({
+      where: { id: groupId },
+      data: { name: dto.name, avatarUrl: dto.avatarUrl },
+      select: {
+        id: true,
+        name: true,
+        avatarUrl: true,
+        inviteCode: true,
+        createdById: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   }
 
   async getMyGroups(userId: string) {
