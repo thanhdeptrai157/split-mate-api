@@ -34,6 +34,7 @@ describe('BillService', () => {
     receiptKey: null,
     groupId: 'group-id',
     createdById: 'owner-user-id',
+    occurredAt: createdAt,
     createdAt,
     updatedAt,
     createdBy: {
@@ -187,6 +188,33 @@ describe('BillService', () => {
     await expect(
       service.createBill('owner-user-id', 'group-id', invalidDto),
     ).rejects.toThrow(BadRequestException);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('tạo bill với ngày trong quá khứ', async () => {
+    const past = '2026-09-01T00:00:00.000Z';
+
+    await service.createBill('owner-user-id', 'group-id', {
+      ...dto,
+      occurredAt: past,
+    });
+
+    expect(billCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ occurredAt: new Date(past) }),
+      }),
+    );
+  });
+
+  it('từ chối bill có ngày ở tương lai trước khi mở transaction', async () => {
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    await expect(
+      service.createBill('owner-user-id', 'group-id', {
+        ...dto,
+        occurredAt: future,
+      }),
+    ).rejects.toThrow('Bill date cannot be in the future');
     expect(transaction).not.toHaveBeenCalled();
   });
 

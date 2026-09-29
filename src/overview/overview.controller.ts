@@ -21,7 +21,9 @@ export class OverviewController {
   constructor(private readonly overviewService: OverviewService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get net balances and simplified debts of a group' })
+  @ApiOperation({
+    summary: 'Get group balances and the current user debts with each member',
+  })
   getGroupOverview(
     @Param('groupId', new ParseUUIDPipe({ version: '4' })) groupId: string,
     @CurrentUser() user: AccessTokenPayload,

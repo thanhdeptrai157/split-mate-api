@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsDateString,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -93,6 +94,15 @@ export class CreateBillDto {
   @IsString()
   @MaxLength(1024)
   receiptKey?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Thời điểm hoá đơn thực tế (ISO 8601). Cho phép ngày quá khứ, không cho ngày tương lai.',
+    example: '2026-09-20T00:00:00.000Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  occurredAt?: string;
 
   @ApiProperty({ type: [CreateBillPayerDto] })
   @IsArray()

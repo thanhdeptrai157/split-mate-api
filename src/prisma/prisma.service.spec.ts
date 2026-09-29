@@ -17,6 +17,7 @@ describe('PrismaService', () => {
               .mockReturnValue(
                 'postgresql://user:password@localhost:5432/splitmate_test',
               ),
+            get: vi.fn().mockReturnValue(undefined),
           },
         },
       ],

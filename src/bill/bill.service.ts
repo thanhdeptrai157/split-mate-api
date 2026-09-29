@@ -20,6 +20,7 @@ const billDetailSelect = {
   name: true,
   note: true,
   receiptKey: true,
+  occurredAt: true,
   groupId: true,
   createdById: true,
   createdAt: true,
@@ -99,6 +100,7 @@ export class BillService {
 
   async createBill(userId: string, groupId: string, dto: CreateBillDto) {
     this.validateFinancialData(dto.items, dto.payers);
+    this.validateOccurredAt(dto.occurredAt);
 
     const bill = await this.prisma.$transaction(async (prisma) => {
       await this.requireGroupMembership(prisma, userId, groupId);
@@ -113,6 +115,7 @@ export class BillService {
           name: dto.name,
           note: dto.note,
           receiptKey: dto.receiptKey,
+          occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : undefined,
           groupId,
           createdById: userId,
           payers: {
@@ -134,7 +137,7 @@ export class BillService {
 
     const bills = await this.prisma.bill.findMany({
       where: { groupId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
       select: billDetailSelect,
     });
 
@@ -168,6 +171,8 @@ export class BillService {
     billId: string,
     dto: UpdateBillDto,
   ) {
+    this.validateOccurredAt(dto.occurredAt);
+
     const updatedBill = await this.prisma.$transaction(async (prisma) => {
       const membership = await this.requireGroupMembership(
         prisma,
@@ -219,6 +224,7 @@ export class BillService {
           name: dto.name,
           note: dto.note,
           receiptKey: dto.receiptKey,
+          occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : undefined,
           items: dto.items
             ? { create: this.toItemCreates(dto.items) }
             : undefined,
@@ -362,6 +368,21 @@ export class BillService {
           `Total share amount must equal the amount of item "${item.name}"`,
         );
       }
+    }
+  }
+
+  /** Chỉ cho phép ngày hoá đơn ở quá khứ hoặc hiện tại, không cho tương lai. */
+  private validateOccurredAt(occurredAt: string | undefined) {
+    if (!occurredAt) return;
+
+    const date = new Date(occurredAt);
+
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Bill date is invalid');
+    }
+
+    if (date.getTime() > Date.now()) {
+      throw new BadRequestException('Bill date cannot be in the future');
     }
   }
 

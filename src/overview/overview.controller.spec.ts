@@ -26,7 +26,7 @@ describe('OverviewController', () => {
   });
 
   it('returns the overview for the authenticated user', async () => {
-    const overview = { groupId: 'group-id', members: [], debts: [] };
+    const overview = { groupId: 'group-id', members: [], myDebts: [] };
     overviewService.getGroupOverview.mockResolvedValue(overview);
 
     await expect(
