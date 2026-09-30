@@ -12,10 +12,14 @@ describe('OverviewController', () => {
   let controller: OverviewController;
   let overviewService: {
     getGroupOverview: ReturnType<typeof vi.fn>;
+    getMemberDebtBreakdown: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
-    overviewService = { getGroupOverview: vi.fn() };
+    overviewService = {
+      getGroupOverview: vi.fn(),
+      getMemberDebtBreakdown: vi.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OverviewController],
@@ -35,6 +39,20 @@ describe('OverviewController', () => {
     expect(overviewService.getGroupOverview).toHaveBeenCalledWith(
       user.sub,
       'group-id',
+    );
+  });
+
+  it('returns the debt breakdown for a member', async () => {
+    const breakdown = { groupId: 'group-id', member: { membershipId: 'm' } };
+    overviewService.getMemberDebtBreakdown.mockResolvedValue(breakdown);
+
+    await expect(
+      controller.getMemberDebtBreakdown('group-id', 'member-id', user),
+    ).resolves.toEqual(breakdown);
+    expect(overviewService.getMemberDebtBreakdown).toHaveBeenCalledWith(
+      user.sub,
+      'group-id',
+      'member-id',
     );
   });
 });

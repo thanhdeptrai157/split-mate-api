@@ -30,4 +30,22 @@ export class OverviewController {
   ) {
     return this.overviewService.getGroupOverview(user.sub, groupId);
   }
+
+  @Get('members/:memberId/debt')
+  @ApiOperation({
+    summary:
+      'Explain why the current user and a member owe each other (bills and settlements)',
+  })
+  @ApiParam({ name: 'memberId', format: 'uuid' })
+  getMemberDebtBreakdown(
+    @Param('groupId', new ParseUUIDPipe({ version: '4' })) groupId: string,
+    @Param('memberId', new ParseUUIDPipe({ version: '4' })) memberId: string,
+    @CurrentUser() user: AccessTokenPayload,
+  ) {
+    return this.overviewService.getMemberDebtBreakdown(
+      user.sub,
+      groupId,
+      memberId,
+    );
+  }
 }

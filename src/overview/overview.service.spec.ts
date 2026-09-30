@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { GroupRole, SettlementStatus } from '../generated/prisma/client.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
@@ -40,6 +40,7 @@ describe('OverviewService', () => {
   };
 
   let groupMemberFindUnique: ReturnType<typeof vi.fn>;
+  let groupMemberFindFirst: ReturnType<typeof vi.fn>;
   let groupMemberFindMany: ReturnType<typeof vi.fn>;
   let billFindMany: ReturnType<typeof vi.fn>;
   let settlementFindMany: ReturnType<typeof vi.fn>;
@@ -47,6 +48,9 @@ describe('OverviewService', () => {
 
   beforeEach(() => {
     groupMemberFindUnique = vi.fn().mockResolvedValue({ id: owner.id });
+    groupMemberFindFirst = vi
+      .fn()
+      .mockResolvedValue({ id: member.id, user: member.user });
     groupMemberFindMany = vi.fn().mockResolvedValue([owner, member]);
     billFindMany = vi.fn().mockResolvedValue([bill]);
     settlementFindMany = vi.fn().mockResolvedValue([]);
@@ -54,6 +58,7 @@ describe('OverviewService', () => {
     const prisma = {
       groupMember: {
         findUnique: groupMemberFindUnique,
+        findFirst: groupMemberFindFirst,
         findMany: groupMemberFindMany,
       },
       bill: { findMany: billFindMany },
@@ -311,5 +316,166 @@ describe('OverviewService', () => {
       service.getGroupOverview('stranger-id', 'group-id'),
     ).rejects.toThrow(NotFoundException);
     expect(billFindMany).not.toHaveBeenCalled();
+  });
+
+  describe('getMemberDebtBreakdown', () => {
+    const billWithMeta = {
+      id: 'bill-id',
+      name: 'Dinner',
+      occurredAt: new Date('2026-09-27T10:00:00.000Z'),
+      createdAt,
+      payers: [{ memberId: owner.id, amount: 150000n }],
+      items: [
+        {
+          amount: 150000n,
+          shares: [
+            { memberId: owner.id, amount: 75000n },
+            { memberId: member.id, amount: 75000n },
+          ],
+        },
+      ],
+    };
+
+    it('explains a bill debt and confirmed repayment', async () => {
+      billFindMany.mockResolvedValue([billWithMeta]);
+      settlementFindMany.mockResolvedValue([
+        {
+          id: 'settlement-id',
+          amount: 25000n,
+          note: null,
+          status: SettlementStatus.CONFIRMED,
+          confirmedAt: createdAt,
+          createdAt,
+          fromMemberId: member.id,
+          toMemberId: owner.id,
+        },
+      ]);
+
+      const breakdown = await service.getMemberDebtBreakdown(
+        'owner-user-id',
+        'group-id',
+        member.id,
+      );
+
+      expect(breakdown).toMatchObject({
+        groupId: 'group-id',
+        member: {
+          membershipId: member.id,
+          id: member.user.id,
+          name: member.user.name,
+          avatarUrl: null,
+        },
+        amount: 50000,
+        netAmount: 50000,
+        direction: 'receivable',
+        billTotal: 75000,
+        settlementTotal: -25000,
+        billCount: 1,
+      });
+
+      expect(breakdown.bills).toEqual([
+        {
+          billId: 'bill-id',
+          name: 'Dinner',
+          occurredAt: billWithMeta.occurredAt,
+          createdAt,
+          totalAmount: 150000,
+          amount: 75000,
+          direction: 'receivable',
+          requester: { paid: 150000, owed: 75000 },
+          counterpart: { paid: 0, owed: 75000 },
+        },
+      ]);
+
+      expect(breakdown.settlements).toEqual([
+        {
+          id: 'settlement-id',
+          amount: 25000,
+          note: null,
+          status: SettlementStatus.CONFIRMED,
+          createdAt,
+          confirmedAt: createdAt,
+          fromMemberId: member.id,
+          toMemberId: owner.id,
+          flow: 'incoming',
+          affectsBalance: true,
+        },
+      ]);
+    });
+
+    it('ignores pending settlements when computing the current debt', async () => {
+      billFindMany.mockResolvedValue([billWithMeta]);
+      settlementFindMany.mockResolvedValue([
+        {
+          id: 'pending-id',
+          amount: 25000n,
+          note: 'đang chờ',
+          status: SettlementStatus.PENDING,
+          confirmedAt: null,
+          createdAt,
+          fromMemberId: member.id,
+          toMemberId: owner.id,
+        },
+      ]);
+
+      const breakdown = await service.getMemberDebtBreakdown(
+        'owner-user-id',
+        'group-id',
+        member.id,
+      );
+
+      expect(breakdown.netAmount).toBe(75000);
+      expect(breakdown.settlementTotal).toBe(0);
+      expect(breakdown.settlements[0]).toMatchObject({
+        status: SettlementStatus.PENDING,
+        affectsBalance: false,
+        flow: 'incoming',
+      });
+    });
+
+    it('marks the direction as payable when the requester owes the member', async () => {
+      billFindMany.mockResolvedValue([billWithMeta]);
+      groupMemberFindUnique.mockResolvedValue({ id: member.id });
+      groupMemberFindFirst.mockResolvedValue({
+        id: owner.id,
+        user: owner.user,
+      });
+
+      const breakdown = await service.getMemberDebtBreakdown(
+        'member-user-id',
+        'group-id',
+        owner.id,
+      );
+
+      expect(breakdown).toMatchObject({
+        amount: 75000,
+        netAmount: -75000,
+        direction: 'payable',
+        billTotal: -75000,
+      });
+      expect(breakdown.bills[0]).toMatchObject({
+        amount: 75000,
+        direction: 'payable',
+      });
+    });
+
+    it('rejects a member outside the group', async () => {
+      groupMemberFindFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getMemberDebtBreakdown('owner-user-id', 'group-id', 'stranger'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('rejects viewing a debt breakdown with yourself', async () => {
+      groupMemberFindFirst.mockResolvedValue({
+        id: owner.id,
+        user: owner.user,
+      });
+
+      await expect(
+        service.getMemberDebtBreakdown('owner-user-id', 'group-id', owner.id),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 });
