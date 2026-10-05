@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Res,
   UploadedFile,
   UseGuards,
@@ -38,6 +39,7 @@ import {
 import { BillService } from './bill.service.js';
 import { CreateBillDto } from './dto/create-bill.dto.js';
 import { UpdateBillDto } from './dto/update-bill.dto.js';
+import { QueryBillDto } from './dto/query-bill.dto.js';
 
 const MAX_IMPORT_FILE_SIZE = 5 * 1024 * 1024;
 const XLSX_CONTENT_TYPE =
@@ -93,8 +95,9 @@ export class BillController {
   getGroupBills(
     @Param('groupId', new ParseUUIDPipe({ version: '4' })) groupId: string,
     @CurrentUser() user: AccessTokenPayload,
+    @Query() query: QueryBillDto,
   ) {
-    return this.billService.getGroupBills(user.sub, groupId);
+    return this.billService.getGroupBills(user.sub, groupId, query);
   }
 
   @Get('import/template')

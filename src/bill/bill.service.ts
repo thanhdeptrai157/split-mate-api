@@ -14,6 +14,8 @@ import {
   CreateBillPayerDto,
 } from './dto/create-bill.dto.js';
 import { UpdateBillDto } from './dto/update-bill.dto.js';
+import { QueryBillDto } from './dto/query-bill.dto.js';
+import { PaginatedResponseDto } from '../common/dto/paginated-response.dto.js';
 
 const billDetailSelect = {
   id: true,
@@ -132,16 +134,31 @@ export class BillService {
     return this.toResponse(bill);
   }
 
-  async getGroupBills(userId: string, groupId: string) {
+  async getGroupBills(userId: string, groupId: string, query: QueryBillDto) {
     await this.requireGroupMembership(this.prisma, userId, groupId);
+    const search = query.search?.trim();
 
-    const bills = await this.prisma.bill.findMany({
-      where: { groupId },
-      orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
-      select: billDetailSelect,
-    });
-
-    return bills.map((bill) => this.toResponse(bill));
+    const where: Prisma.BillWhereInput = {
+      groupId,
+      ...(query.createdById ? { createdById: query.createdById } : {}),
+      ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
+    };
+    const [bills, total] = await Promise.all([
+      this.prisma.bill.findMany({
+        where,
+        skip: query.skip,
+        take: query.limit,
+        orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+        select: billDetailSelect,
+      }),
+      this.prisma.bill.count({ where }),
+    ]);
+    return new PaginatedResponseDto(
+      bills.map((bill) => this.toResponse(bill)),
+      query.page,
+      query.limit,
+      total,
+    );
   }
 
   async getBillDetail(userId: string, groupId: string, billId: string) {
